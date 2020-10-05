@@ -1,0 +1,76 @@
+variables:
+  RECEIVER_REPO: "$CI_REGISTRY_IMAGE/receiver"
+  BOT_REPO: "$CI_REGISTRY_IMAGE/bot"
+  TAG: "0.1-$CI_COMMIT_SHORT_SHA"
+
+before_script:
+  - docker info
+
+stages:
+  - build
+  - deploy
+
+before_script:
+
+build-receiver:
+  stage: build
+  tags:
+    - fvm233
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $RECEIVER_REPO:$TAG -f ./docker/receiver/Dockerfile .
+    - docker push $RECEIVER_REPO:$TAG
+  only:
+    changes:
+      - receiver/*
+      - docker/receiver/*
+
+build-bot:
+  stage: build
+  tags:
+    - fvm233
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $BOT_REPO:$TAG -f ./docker/bot/Dockerfile .
+    - docker push $BOT_REPO:$TAG
+  only:
+    changes:
+      - bot/*
+      - docker/bot/*
+
+deploy-receiver:
+  stage: deploy
+  tags:
+    - fvm233
+  script:
+    - docker stop receiver-bot || true
+    - docker rm receiver-bot || true
+    - docker run -d --env-file $ENV_CONFIG -p5000:5000 --name receiver-bot $RECEIVER_REPO:$TAG
+  dependencies:
+    - build-receiver
+  # when: manual
+  only:
+    refs:
+      - master
+    changes:
+      - receiver/*
+      - docker/receiver/*
+
+deploy-bot:
+  stage: deploy
+  tags:
+    - fvm233
+  script:
+    - docker stop bot || true
+    - docker rm bot || true
+    - docker run -d --env-file $ENV_CONFIG --name bot $BOT_REPO:$TAG
+  dependencies:
+    - build-bot
+  # when: manual
+  only:
+    refs:
+      - master
+    changes:
+      - bot/*
+      - docker/bot/*
+
